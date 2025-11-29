@@ -23,7 +23,7 @@ app.use('/api/transactions', transactionRoutes);
 // Health check
 app.get('/', (req: Request, res: Response) => {
     res.json({
-        message: 'OkCredit API is running!',
+        message: 'Kredit API is running!',
         timestamp: new Date().toISOString()
     });
 });
