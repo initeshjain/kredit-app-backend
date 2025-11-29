@@ -109,60 +109,55 @@ router.get('/dashboard/:userPhone', async (req: Request, res: Response): Promise
             return;
         }
 
-        // Get all transactions where user is either sender or receiver
-        const transactions = await Transaction.find({
-            $or: [
-                { sender: userPhone },
-                { receiver: userPhone }
-            ]
-        }).sort({ date: -1 });
-
-        // Group transactions by contact (other party)
-        const contactMap = new Map<string, {
-            phone: string;
-            transactions: any[];
-            balance: number;
-            lastTransactionDate: Date;
-        }>();
-
-        transactions.forEach(tx => {
-            const otherParty = tx.sender === userPhone ? tx.receiver : tx.sender;
-            
-            if (!contactMap.has(otherParty)) {
-                contactMap.set(otherParty, {
-                    phone: otherParty,
-                    transactions: [],
-                    balance: 0,
-                    lastTransactionDate: tx.date
-                });
+        // Use aggregation to calculate balances and stats efficiently
+        // This avoids loading all transactions into memory
+        const contactStats = await Transaction.aggregate([
+            {
+                $match: {
+                    $or: [
+                        { sender: userPhone },
+                        { receiver: userPhone }
+                    ]
+                }
+            },
+            {
+                $group: {
+                    _id: {
+                        $cond: [
+                            { $eq: ['$sender', userPhone] },
+                            '$receiver',
+                            '$sender'
+                        ]
+                    },
+                    balance: {
+                        $sum: {
+                            $cond: [
+                                { $eq: ['$sender', userPhone] },
+                                '$amount',  // User sent money (they owe user)
+                                { $multiply: ['$amount', -1] }  // User received money (user owes them)
+                            ]
+                        }
+                    },
+                    transactionCount: { $sum: 1 },
+                    lastTransactionDate: { $max: '$date' }
+                }
+            },
+            {
+                $project: {
+                    _id: 0,
+                    phone: '$_id',
+                    balance: 1,
+                    transactionCount: 1,
+                    lastTransactionDate: 1
+                }
             }
+        ]);
 
-            const contact = contactMap.get(otherParty)!;
-            contact.transactions.push(tx);
-            
-            // Calculate balance
-            if (tx.sender === userPhone) {
-                contact.balance += tx.amount; // User sent money (they owe user)
-            } else {
-                contact.balance -= tx.amount; // User received money (user owes them)
-            }
-
-            // Update last transaction date
-            if (tx.date > contact.lastTransactionDate) {
-                contact.lastTransactionDate = tx.date;
-            }
-        });
-
-        // Convert map to array and calculate totals
-        const contacts = Array.from(contactMap.values()).map(contact => ({
-            ...contact,
-            lastTransactionDate: contact.lastTransactionDate.toISOString()
-        }));
-        
+        // Calculate totals
         let totalToGive = 0; // Negative balances (user owes)
         let totalToReceive = 0; // Positive balances (they owe user)
 
-        contacts.forEach(contact => {
+        contactStats.forEach(contact => {
             if (contact.balance < 0) {
                 totalToGive += Math.abs(contact.balance);
             } else if (contact.balance > 0) {
@@ -171,6 +166,14 @@ router.get('/dashboard/:userPhone', async (req: Request, res: Response): Promise
         });
 
         const finalAmount = totalToReceive - totalToGive;
+
+        // Convert dates to ISO strings
+        const contacts = contactStats.map(contact => ({
+            phone: contact.phone,
+            balance: contact.balance,
+            transactionCount: contact.transactionCount,
+            lastTransactionDate: contact.lastTransactionDate.toISOString()
+        }));
 
         res.json({
             contacts,
