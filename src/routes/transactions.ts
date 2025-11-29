@@ -99,4 +99,91 @@ router.get('/balance/:user1/:user2', async (req: Request, res: Response): Promis
     }
 });
 
+// Get all contacts with transactions and balances for a user
+router.get('/dashboard/:userPhone', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { userPhone } = req.params;
+
+        if (!userPhone) {
+            res.status(400).json({ error: 'User phone is required' });
+            return;
+        }
+
+        // Get all transactions where user is either sender or receiver
+        const transactions = await Transaction.find({
+            $or: [
+                { sender: userPhone },
+                { receiver: userPhone }
+            ]
+        }).sort({ date: -1 });
+
+        // Group transactions by contact (other party)
+        const contactMap = new Map<string, {
+            phone: string;
+            transactions: any[];
+            balance: number;
+            lastTransactionDate: Date;
+        }>();
+
+        transactions.forEach(tx => {
+            const otherParty = tx.sender === userPhone ? tx.receiver : tx.sender;
+            
+            if (!contactMap.has(otherParty)) {
+                contactMap.set(otherParty, {
+                    phone: otherParty,
+                    transactions: [],
+                    balance: 0,
+                    lastTransactionDate: tx.date
+                });
+            }
+
+            const contact = contactMap.get(otherParty)!;
+            contact.transactions.push(tx);
+            
+            // Calculate balance
+            if (tx.sender === userPhone) {
+                contact.balance += tx.amount; // User sent money (they owe user)
+            } else {
+                contact.balance -= tx.amount; // User received money (user owes them)
+            }
+
+            // Update last transaction date
+            if (tx.date > contact.lastTransactionDate) {
+                contact.lastTransactionDate = tx.date;
+            }
+        });
+
+        // Convert map to array and calculate totals
+        const contacts = Array.from(contactMap.values()).map(contact => ({
+            ...contact,
+            lastTransactionDate: contact.lastTransactionDate.toISOString()
+        }));
+        
+        let totalToGive = 0; // Negative balances (user owes)
+        let totalToReceive = 0; // Positive balances (they owe user)
+
+        contacts.forEach(contact => {
+            if (contact.balance < 0) {
+                totalToGive += Math.abs(contact.balance);
+            } else if (contact.balance > 0) {
+                totalToReceive += contact.balance;
+            }
+        });
+
+        const finalAmount = totalToReceive - totalToGive;
+
+        res.json({
+            contacts,
+            stats: {
+                totalToGive,
+                totalToReceive,
+                finalAmount
+            }
+        });
+    } catch (error) {
+        const err = error as Error;
+        res.status(500).json({ error: err.message });
+    }
+});
+
 export default router;
