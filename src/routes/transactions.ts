@@ -1,16 +1,21 @@
 import { Router, Request, Response } from 'express';
 import Transaction from '../models/Transaction';
 import { ICreateTransactionDTO, ISmsStatus } from '../types';
+import { authMiddleware } from '../middleware/auth';
 
 const router: Router = Router();
 
-// Get all transactions between two users
-router.get('/between/:user1/:user2', async (req: Request, res: Response): Promise<void> => {
-    try {
-        const { user1, user2 } = req.params;
+// All transaction routes require authentication
+router.use(authMiddleware);
 
-        if (!user1 || !user2) {
-            res.status(400).json({ error: 'Both user1 and user2 are required' });
+// Get all transactions between authenticated user and another user
+router.get('/between/:user2', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const user1 = req.user!.phone; // Authenticated user's phone
+        const { user2 } = req.params;
+
+        if (!user2) {
+            res.status(400).json({ error: 'Other user phone is required' });
             return;
         }
 
@@ -28,15 +33,24 @@ router.get('/between/:user1/:user2', async (req: Request, res: Response): Promis
     }
 });
 
-// Create new transaction
+// Create new transaction (sender is authenticated user)
 router.post('/', async (req: Request, res: Response): Promise<void> => {
     try {
-        const transactionData: ICreateTransactionDTO = req.body;
+        const sender = req.user!.phone; // Authenticated user's phone
+        const { receiver, amount, date, note } = req.body;
 
-        if (!transactionData.sender || !transactionData.receiver || !transactionData.amount) {
-            res.status(400).json({ error: 'Sender, receiver, and amount are required' });
+        if (!receiver || !amount) {
+            res.status(400).json({ error: 'Receiver and amount are required' });
             return;
         }
+
+        const transactionData: ICreateTransactionDTO = {
+            sender,
+            receiver,
+            amount,
+            date: date ? new Date(date) : undefined,
+            note: note || ''
+        };
 
         const transaction = new Transaction(transactionData);
         await transaction.save();
@@ -72,10 +86,16 @@ router.patch('/:id/sms-status', async (req: Request, res: Response): Promise<voi
     }
 });
 
-// Get balance between two users
-router.get('/balance/:user1/:user2', async (req: Request, res: Response): Promise<void> => {
+// Get balance between authenticated user and another user
+router.get('/balance/:user2', async (req: Request, res: Response): Promise<void> => {
     try {
-        const { user1, user2 } = req.params;
+        const user1 = req.user!.phone; // Authenticated user's phone
+        const { user2 } = req.params;
+
+        if (!user2) {
+            res.status(400).json({ error: 'Other user phone is required' });
+            return;
+        }
 
         const transactions = await Transaction.find({
             $or: [
@@ -99,15 +119,10 @@ router.get('/balance/:user1/:user2', async (req: Request, res: Response): Promis
     }
 });
 
-// Get all contacts with transactions and balances for a user
-router.get('/dashboard/:userPhone', async (req: Request, res: Response): Promise<void> => {
+// Get all contacts with transactions and balances for authenticated user
+router.get('/dashboard', async (req: Request, res: Response): Promise<void> => {
     try {
-        const { userPhone } = req.params;
-
-        if (!userPhone) {
-            res.status(400).json({ error: 'User phone is required' });
-            return;
-        }
+        const userPhone = req.user!.phone; // Authenticated user's phone
 
         // Use aggregation to calculate balances and stats efficiently
         // This avoids loading all transactions into memory
