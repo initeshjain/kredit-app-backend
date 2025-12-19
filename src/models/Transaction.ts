@@ -22,6 +22,10 @@ const TransactionSchema: Schema = new Schema(
             type: Date,
             default: Date.now
         },
+        transactionDate: {
+            type: Date,
+            default: Date.now
+        },
         note: {
             type: String,
             default: '',

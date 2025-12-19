@@ -5,6 +5,7 @@ export interface IUser extends mongoose.Document {
     phone: string;
     fullPhone: string; // Combined for backward compatibility and queries
     email: string;
+    name?: string;
     otp?: {
         code: string;
         expiresAt: Date;
@@ -41,6 +42,11 @@ const UserSchema: Schema = new Schema(
             lowercase: true,
             index: true,
             match: [/^\S+@\S+\.\S+$/, 'Please enter a valid email']
+        },
+        name: {
+            type: String,
+            trim: true,
+            default: ''
         },
         otp: {
             code: {

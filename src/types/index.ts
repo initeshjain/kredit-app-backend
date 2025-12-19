@@ -6,6 +6,7 @@ export interface ITransaction extends Document {
     receiver: string;
     amount: number;
     date: Date;
+    transactionDate: Date;
     note: string;
     smsStatus: {
         sent: boolean;
@@ -27,5 +28,12 @@ export interface ICreateTransactionDTO {
     receiver: string;
     amount: number;
     date?: Date;
+    transactionDate?: Date;
+    note?: string;
+}
+
+export interface IUpdateTransactionDTO {
+    amount?: number;
+    transactionDate?: Date;
     note?: string;
 }

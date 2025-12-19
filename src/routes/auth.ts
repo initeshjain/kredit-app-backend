@@ -302,12 +302,67 @@ router.get('/verify', authMiddleware, async (req: Request, res: Response): Promi
             valid: true,
             user: {
                 phone: user.fullPhone,
-                email: user.email
+                email: user.email,
+                name: user.name || ''
             }
         });
     } catch (error) {
         const err = error as Error;
         console.error('Verify user error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get user profile
+router.get('/profile', authMiddleware, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const userPhone = req.user!.phone;
+        const user = await User.findOne({ fullPhone: userPhone });
+        
+        if (!user) {
+            res.status(404).json({ error: 'User not found' });
+            return;
+        }
+        
+        res.json({
+            phone: user.fullPhone,
+            email: user.email,
+            name: user.name || ''
+        });
+    } catch (error) {
+        const err = error as Error;
+        console.error('Get profile error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Update user profile
+router.put('/profile', authMiddleware, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const userPhone = req.user!.phone;
+        const { name } = req.body;
+        
+        const user = await User.findOne({ fullPhone: userPhone });
+        
+        if (!user) {
+            res.status(404).json({ error: 'User not found' });
+            return;
+        }
+        
+        if (name !== undefined) {
+            user.name = name.trim() || '';
+        }
+        
+        await user.save();
+        
+        res.json({
+            phone: user.fullPhone,
+            email: user.email,
+            name: user.name || ''
+        });
+    } catch (error) {
+        const err = error as Error;
+        console.error('Update profile error:', err);
         res.status(500).json({ error: err.message });
     }
 });

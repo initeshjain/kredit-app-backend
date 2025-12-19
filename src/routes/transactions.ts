@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import Transaction from '../models/Transaction';
-import { ICreateTransactionDTO, ISmsStatus } from '../types';
+import { ICreateTransactionDTO, IUpdateTransactionDTO, ISmsStatus } from '../types';
 import { authMiddleware } from '../middleware/auth';
 
 const router: Router = Router();
@@ -24,7 +24,7 @@ router.get('/between/:user2', async (req: Request, res: Response): Promise<void>
                 { sender: user1, receiver: user2 },
                 { sender: user2, receiver: user1 }
             ]
-        }).sort({ date: 1 });
+        }).sort({ transactionDate: 1 });
 
         res.json(transactions);
     } catch (error) {
@@ -51,11 +51,14 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         const sender = isReceive ? receiver : authenticatedUser;
         const actualReceiver = isReceive ? authenticatedUser : receiver;
 
+        const transactionDate = req.body.transactionDate ? new Date(req.body.transactionDate) : (date ? new Date(date) : new Date());
+        
         const transactionData: ICreateTransactionDTO = {
             sender,
             receiver: actualReceiver,
             amount,
             date: date ? new Date(date) : undefined,
+            transactionDate,
             note: note || ''
         };
 
@@ -63,6 +66,59 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         await transaction.save();
 
         res.status(201).json(transaction);
+    } catch (error) {
+        const err = error as Error;
+        res.status(400).json({ error: err.message });
+    }
+});
+
+// Update transaction
+router.put('/:id', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const authenticatedUser = req.user!.phone;
+        const { amount, transactionDate, note } = req.body;
+
+        const transaction = await Transaction.findById(id);
+
+        if (!transaction) {
+            res.status(404).json({ error: 'Transaction not found' });
+            return;
+        }
+
+        // Verify that the transaction belongs to the authenticated user
+        if (transaction.sender !== authenticatedUser && transaction.receiver !== authenticatedUser) {
+            res.status(403).json({ error: 'Unauthorized to edit this transaction' });
+            return;
+        }
+
+        const updateData: IUpdateTransactionDTO = {};
+        if (amount !== undefined) {
+            if (amount <= 0) {
+                res.status(400).json({ error: 'Amount must be positive' });
+                return;
+            }
+            updateData.amount = amount;
+        }
+        if (transactionDate !== undefined) {
+            const date = new Date(transactionDate);
+            if (isNaN(date.getTime())) {
+                res.status(400).json({ error: 'Invalid transaction date' });
+                return;
+            }
+            updateData.transactionDate = date;
+        }
+        if (note !== undefined) {
+            updateData.note = note || '';
+        }
+
+        const updatedTransaction = await Transaction.findByIdAndUpdate(
+            id,
+            updateData,
+            { new: true, runValidators: true }
+        );
+
+        res.json(updatedTransaction);
     } catch (error) {
         const err = error as Error;
         res.status(400).json({ error: err.message });
