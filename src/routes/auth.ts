@@ -3,6 +3,7 @@ import rateLimit from 'express-rate-limit';
 import User from '../models/User';
 import { sendOTP } from '../utils/email';
 import { generateAccessToken, generateRefreshToken, ITokenPayload } from '../utils/jwt';
+import { authMiddleware } from '../middleware/auth';
 
 const router: Router = Router();
 
@@ -29,6 +30,42 @@ const generateOTP = (): string => {
     return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
+// Helper function to parse phone number into country code and phone
+const parsePhoneNumber = (fullPhone: string): { countryCode: string; phone: string } | null => {
+    if (!fullPhone) return null;
+    
+    // Remove all non-digit characters except +
+    const cleaned = fullPhone.replace(/[^\d+]/g, '');
+    
+    // If starts with +, extract country code (1-3 digits)
+    if (cleaned.startsWith('+')) {
+        const withoutPlus = cleaned.substring(1);
+        // Try to match common country codes
+        // 1 digit: +1 (USA/Canada)
+        if (withoutPlus.startsWith('1') && withoutPlus.length >= 11) {
+            return { countryCode: '+1', phone: withoutPlus.substring(1) };
+        }
+        // 2 digits: +91 (India), +44 (UK), etc.
+        const twoDigitCodes = ['91', '44', '86', '81', '49', '33', '39', '34', '61', '7'];
+        for (const code of twoDigitCodes) {
+            if (withoutPlus.startsWith(code) && withoutPlus.length >= (code.length + 10)) {
+                return { countryCode: `+${code}`, phone: withoutPlus.substring(code.length) };
+            }
+        }
+        // 3 digits: less common
+        if (withoutPlus.length >= 13) {
+            return { countryCode: `+${withoutPlus.substring(0, 3)}`, phone: withoutPlus.substring(3) };
+        }
+    }
+    
+    // If no +, assume it's already just the phone number (default to +91 for India)
+    if (cleaned.length === 10) {
+        return { countryCode: '+91', phone: cleaned };
+    }
+    
+    return null;
+};
+
 // Login/Register - Send OTP
 router.post('/login', otpRateLimiter, async (req: Request, res: Response): Promise<void> => {
     try {
@@ -46,26 +83,33 @@ router.post('/login', otpRateLimiter, async (req: Request, res: Response): Promi
             return;
         }
 
-        // Validate phone format (should start with +)
-        if (!phone.startsWith('+')) {
-            res.status(400).json({ error: 'Phone number must start with +' });
+        // Parse phone number
+        const parsed = parsePhoneNumber(phone);
+        if (!parsed) {
+            res.status(400).json({ error: 'Invalid phone number format' });
             return;
         }
 
-        // Find or create user
-        let user = await User.findOne({ phone });
+        const { countryCode, phone: phoneNumber } = parsed;
+        const fullPhone = countryCode + phoneNumber;
+
+        // Find or create user by fullPhone
+        let user = await User.findOne({ fullPhone });
 
         if (user) {
-            // User exists - update email if different
+            // User exists - update email and phone details if different
             if (user.email !== email.toLowerCase()) {
                 // Check if email is already taken by another user
                 const emailExists = await User.findOne({ email: email.toLowerCase() });
-                if (emailExists && emailExists.phone !== phone) {
+                if (emailExists && emailExists.fullPhone !== fullPhone) {
                     res.status(400).json({ error: 'Email is already registered with another phone number' });
                     return;
                 }
                 user.email = email.toLowerCase();
             }
+            // Update country code and phone if changed
+            user.countryCode = countryCode;
+            user.phone = phoneNumber;
         } else {
             // Check if email is already taken
             const emailExists = await User.findOne({ email: email.toLowerCase() });
@@ -76,7 +120,9 @@ router.post('/login', otpRateLimiter, async (req: Request, res: Response): Promi
 
             // Create new user
             user = new User({
-                phone,
+                countryCode,
+                phone: phoneNumber,
+                fullPhone,
                 email: email.toLowerCase()
             });
         }
@@ -104,7 +150,7 @@ router.post('/login', otpRateLimiter, async (req: Request, res: Response): Promi
 
         res.json({
             message: 'OTP sent to your email',
-            phone: user.phone,
+            phone: user.fullPhone,
             email: user.email
         });
     } catch (error) {
@@ -124,7 +170,15 @@ router.post('/verify-otp', verifyRateLimiter, async (req: Request, res: Response
             return;
         }
 
-        const user = await User.findOne({ phone });
+        // Parse phone to get fullPhone for lookup
+        const parsed = parsePhoneNumber(phone);
+        if (!parsed) {
+            res.status(400).json({ error: 'Invalid phone number format' });
+            return;
+        }
+        const fullPhone = parsed.countryCode + parsed.phone;
+        
+        const user = await User.findOne({ fullPhone });
 
         if (!user) {
             res.status(404).json({ error: 'User not found. Please request OTP first.' });
@@ -161,7 +215,7 @@ router.post('/verify-otp', verifyRateLimiter, async (req: Request, res: Response
         await user.save();
 
         const tokenPayload: ITokenPayload = {
-            phone: user.phone,
+            phone: user.fullPhone, // Use fullPhone for backward compatibility
             email: user.email,
             userId: user._id.toString()
         };
@@ -174,7 +228,7 @@ router.post('/verify-otp', verifyRateLimiter, async (req: Request, res: Response
             accessToken,
             refreshToken,
             user: {
-                phone: user.phone,
+                phone: user.fullPhone,
                 email: user.email
             }
         });
@@ -199,8 +253,8 @@ router.post('/refresh-token', async (req: Request, res: Response): Promise<void>
             const { verifyRefreshToken } = await import('../utils/jwt');
             const decoded = verifyRefreshToken(refreshToken);
 
-            // Verify user still exists
-            const user = await User.findOne({ phone: decoded.phone });
+            // Verify user still exists (decoded.phone is fullPhone)
+            const user = await User.findOne({ fullPhone: decoded.phone });
             if (!user) {
                 res.status(404).json({ error: 'User not found' });
                 return;
@@ -208,7 +262,7 @@ router.post('/refresh-token', async (req: Request, res: Response): Promise<void>
 
             // Generate new tokens
             const tokenPayload: ITokenPayload = {
-                phone: user.phone,
+                phone: user.fullPhone,
                 email: user.email,
                 userId: user._id.toString()
             };
@@ -227,6 +281,33 @@ router.post('/refresh-token', async (req: Request, res: Response): Promise<void>
     } catch (error) {
         const err = error as Error;
         console.error('Refresh token error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Verify user exists and token is valid
+router.get('/verify', authMiddleware, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const userPhone = req.user!.phone; // Authenticated user's phone (fullPhone)
+        
+        // Verify user exists in database
+        const user = await User.findOne({ fullPhone: userPhone });
+        
+        if (!user) {
+            res.status(404).json({ error: 'User not found' });
+            return;
+        }
+        
+        res.json({
+            valid: true,
+            user: {
+                phone: user.fullPhone,
+                email: user.email
+            }
+        });
+    } catch (error) {
+        const err = error as Error;
+        console.error('Verify user error:', err);
         res.status(500).json({ error: err.message });
     }
 });

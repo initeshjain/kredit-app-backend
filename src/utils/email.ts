@@ -18,6 +18,18 @@ const resend = new Resend(RESEND_API_KEY);
 //     }
 // });
 
+// Theme colors matching the app theme
+const THEME_COLORS = {
+    primary: '#234f9d',
+    primaryLight: '#3B82F6',
+    background: '#f2f4f7',
+    surface: '#FFFFFF',
+    textDark: '#020617',
+    textMuted: '#475569',
+    textLight: '#94a3b8',
+    border: '#E2E8F0',
+};
+
 export const sendOTP = async (email: string, otp: string): Promise<boolean> => {
     try {
         const mailOptions = {
@@ -26,21 +38,21 @@ export const sendOTP = async (email: string, otp: string): Promise<boolean> => {
             subject: 'Your Kredit App OTP',
             html: `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                    <div style="background-color: #ffcd1c; padding: 20px; text-align: center; border-radius: 10px 10px 0 0;">
-                        <h1 style="color: #000000; margin: 0;">Kredit App</h1>
+                    <div style="background-color: ${THEME_COLORS.primary}; padding: 20px; text-align: center; border-radius: 10px 10px 0 0;">
+                        <h1 style="color: ${THEME_COLORS.surface}; margin: 0; font-size: 28px; font-weight: bold;">Kredit App</h1>
                     </div>
-                    <div style="background-color: #ffffff; padding: 30px; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 10px 10px;">
-                        <h2 style="color: #333333; margin-top: 0;">OTP Verification</h2>
-                        <p style="color: #666666; font-size: 16px; line-height: 1.6;">
+                    <div style="background-color: ${THEME_COLORS.surface}; padding: 30px; border: 1px solid ${THEME_COLORS.border}; border-top: none; border-radius: 0 0 10px 10px;">
+                        <h2 style="color: ${THEME_COLORS.textDark}; margin-top: 0; font-size: 24px;">OTP Verification</h2>
+                        <p style="color: ${THEME_COLORS.textMuted}; font-size: 16px; line-height: 1.6;">
                             Your OTP for Kredit App login is:
                         </p>
-                        <div style="background-color: #f5f5f5; padding: 20px; text-align: center; border-radius: 8px; margin: 20px 0;">
-                            <h1 style="color: #ffcd1c; font-size: 36px; letter-spacing: 8px; margin: 0; font-weight: bold;">${otp}</h1>
+                        <div style="background-color: ${THEME_COLORS.background}; padding: 20px; text-align: center; border-radius: 8px; margin: 20px 0; border: 2px solid ${THEME_COLORS.primaryLight};">
+                            <h1 style="color: ${THEME_COLORS.primary}; font-size: 36px; letter-spacing: 8px; margin: 0; font-weight: bold;">${otp}</h1>
                         </div>
-                        <p style="color: #666666; font-size: 14px; line-height: 1.6;">
+                        <p style="color: ${THEME_COLORS.textMuted}; font-size: 14px; line-height: 1.6;">
                             This OTP will expire in 10 minutes. Please do not share this code with anyone.
                         </p>
-                        <p style="color: #999999; font-size: 12px; margin-top: 30px; border-top: 1px solid #e0e0e0; padding-top: 20px;">
+                        <p style="color: ${THEME_COLORS.textLight}; font-size: 12px; margin-top: 30px; border-top: 1px solid ${THEME_COLORS.border}; padding-top: 20px;">
                             If you didn't request this OTP, please ignore this email.
                         </p>
                     </div>
@@ -49,12 +61,12 @@ export const sendOTP = async (email: string, otp: string): Promise<boolean> => {
         };
 
         // await transporter.sendMail(mailOptions);
-        resend.emails.send({
+        await resend.emails.send({
             from: mailOptions.from,
             to: mailOptions.to,
             subject: mailOptions.subject,
             html: mailOptions.html
-          });
+        });
         return true;
     } catch (error) {
         console.error('Error sending OTP email:', error);

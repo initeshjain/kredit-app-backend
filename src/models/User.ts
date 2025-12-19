@@ -1,7 +1,9 @@
 import mongoose, { Schema } from 'mongoose';
 
 export interface IUser extends mongoose.Document {
+    countryCode: string;
     phone: string;
+    fullPhone: string; // Combined for backward compatibility and queries
     email: string;
     otp?: {
         code: string;
@@ -14,9 +16,19 @@ export interface IUser extends mongoose.Document {
 
 const UserSchema: Schema = new Schema(
     {
+        countryCode: {
+            type: String,
+            required: [true, 'Country code is required'],
+            trim: true
+        },
         phone: {
             type: String,
             required: [true, 'Phone number is required'],
+            trim: true
+        },
+        fullPhone: {
+            type: String,
+            required: [true, 'Full phone number is required'],
             unique: true,
             trim: true,
             index: true
@@ -49,6 +61,14 @@ const UserSchema: Schema = new Schema(
         timestamps: true
     }
 );
+
+// Pre-save hook to ensure fullPhone is set
+UserSchema.pre('save', function(next: mongoose.CallbackWithoutResultAndOptionalError) {
+    if (this.countryCode && this.phone && !this.fullPhone) {
+        this.fullPhone = String(this.countryCode) + String(this.phone);
+    }
+    next();
+});
 
 export default mongoose.model<IUser>('User', UserSchema);
 
