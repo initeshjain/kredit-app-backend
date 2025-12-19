@@ -33,20 +33,27 @@ router.get('/between/:user2', async (req: Request, res: Response): Promise<void>
     }
 });
 
-// Create new transaction (sender is authenticated user)
+// Create new transaction
+// If isReceive is true, the contact is the sender and authenticated user is the receiver
+// If isReceive is false (default), authenticated user is the sender and contact is the receiver
 router.post('/', async (req: Request, res: Response): Promise<void> => {
     try {
-        const sender = req.user!.phone; // Authenticated user's phone
-        const { receiver, amount, date, note } = req.body;
+        const authenticatedUser = req.user!.phone; // Authenticated user's phone
+        const { receiver, amount, date, note, isReceive } = req.body;
 
         if (!receiver || !amount) {
             res.status(400).json({ error: 'Receiver and amount are required' });
             return;
         }
 
+        // If isReceive is true, swap sender and receiver
+        // Contact sends to authenticated user
+        const sender = isReceive ? receiver : authenticatedUser;
+        const actualReceiver = isReceive ? authenticatedUser : receiver;
+
         const transactionData: ICreateTransactionDTO = {
             sender,
-            receiver,
+            receiver: actualReceiver,
             amount,
             date: date ? new Date(date) : undefined,
             note: note || ''
