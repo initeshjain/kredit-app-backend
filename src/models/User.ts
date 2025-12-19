@@ -63,11 +63,10 @@ const UserSchema: Schema = new Schema(
 );
 
 // Pre-save hook to ensure fullPhone is set
-UserSchema.pre('save', function(next: mongoose.CallbackWithoutResultAndOptionalError) {
+UserSchema.pre('save', async function() {
     if (this.countryCode && this.phone && !this.fullPhone) {
         this.fullPhone = String(this.countryCode) + String(this.phone);
     }
-    next();
 });
 
 export default mongoose.model<IUser>('User', UserSchema);
