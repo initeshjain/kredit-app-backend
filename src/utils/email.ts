@@ -1,22 +1,27 @@
-import nodemailer from 'nodemailer';
+// import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 
-const EMAIL_USER = process.env.EMAIL_USER || '';
-const EMAIL_PASS = process.env.EMAIL_PASS || '';
-const EMAIL_FROM = process.env.EMAIL_FROM || EMAIL_USER;
+// const EMAIL_USER = process.env.EMAIL_USER || '';
+// const EMAIL_PASS = process.env.EMAIL_PASS || '';
+// const EMAIL_FROM = process.env.EMAIL_FROM || EMAIL_USER;
+
+const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
+
+const resend = new Resend(RESEND_API_KEY);
 
 // Create transporter
-const transporter = nodemailer.createTransport({
-    service: 'gmail', // Change to your email service if needed
-    auth: {
-        user: EMAIL_USER,
-        pass: EMAIL_PASS
-    }
-});
+// const transporter = nodemailer.createTransport({
+//     service: 'gmail', // Change to your email service if needed
+//     auth: {
+//         user: EMAIL_USER,
+//         pass: EMAIL_PASS
+//     }
+// });
 
 export const sendOTP = async (email: string, otp: string): Promise<boolean> => {
     try {
         const mailOptions = {
-            from: EMAIL_FROM,
+            from: "noreply@noobgeek.in",
             to: email,
             subject: 'Your Kredit App OTP',
             html: `
@@ -43,7 +48,13 @@ export const sendOTP = async (email: string, otp: string): Promise<boolean> => {
             `
         };
 
-        await transporter.sendMail(mailOptions);
+        // await transporter.sendMail(mailOptions);
+        resend.emails.send({
+            from: mailOptions.from,
+            to: mailOptions.to,
+            subject: mailOptions.subject,
+            html: mailOptions.html
+          });
         return true;
     } catch (error) {
         console.error('Error sending OTP email:', error);
