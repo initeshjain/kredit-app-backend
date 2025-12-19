@@ -39,10 +39,15 @@ router.get('/between/:user2', async (req: Request, res: Response): Promise<void>
 router.post('/', async (req: Request, res: Response): Promise<void> => {
     try {
         const authenticatedUser = req.user!.phone; // Authenticated user's phone
-        const { receiver, amount, date, note, isReceive } = req.body;
+        const { receiver, amount, transactionDate, note, isReceive } = req.body;
 
         if (!receiver || !amount) {
             res.status(400).json({ error: 'Receiver and amount are required' });
+            return;
+        }
+
+        if (!transactionDate) {
+            res.status(400).json({ error: 'Transaction date is required' });
             return;
         }
 
@@ -51,14 +56,17 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         const sender = isReceive ? receiver : authenticatedUser;
         const actualReceiver = isReceive ? authenticatedUser : receiver;
 
-        const transactionDate = req.body.transactionDate ? new Date(req.body.transactionDate) : (date ? new Date(date) : new Date());
+        const txDate = new Date(transactionDate);
+        if (isNaN(txDate.getTime())) {
+            res.status(400).json({ error: 'Invalid transaction date' });
+            return;
+        }
         
         const transactionData: ICreateTransactionDTO = {
             sender,
             receiver: actualReceiver,
             amount,
-            date: date ? new Date(date) : undefined,
-            transactionDate,
+            transactionDate: txDate,
             note: note || ''
         };
 
@@ -217,7 +225,7 @@ router.get('/dashboard', async (req: Request, res: Response): Promise<void> => {
                         }
                     },
                     transactionCount: { $sum: 1 },
-                    lastTransactionDate: { $max: '$date' }
+                    lastTransactionDate: { $max: '$transactionDate' }
                 }
             },
             {

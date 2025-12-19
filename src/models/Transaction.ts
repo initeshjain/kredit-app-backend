@@ -18,12 +18,9 @@ const TransactionSchema: Schema = new Schema(
             required: [true, 'Amount is required'],
             min: [0, 'Amount must be positive']
         },
-        date: {
-            type: Date,
-            default: Date.now
-        },
         transactionDate: {
             type: Date,
+            required: [true, 'Transaction date is required'],
             default: Date.now
         },
         note: {
