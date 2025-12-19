@@ -10,6 +10,9 @@ dotenv.config();
 const app: Application = express();
 const PORT: number = parseInt(process.env.PORT || '8080', 10);
 
+// Trust the first proxy (Render / Load balancer)
+app.set('trust proxy', 1);
+
 // Logger middleware
 const logger = (req: Request, res: Response, next: NextFunction): void => {
     const start = Date.now();
