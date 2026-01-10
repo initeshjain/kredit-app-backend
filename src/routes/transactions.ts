@@ -19,14 +19,40 @@ router.get('/between/:user2', async (req: Request, res: Response): Promise<void>
             return;
         }
 
-        const transactions = await Transaction.find({
+        // Get pagination parameters
+        const limit = parseInt(req.query.limit as string || '20', 10);
+        const skip = parseInt(req.query.skip as string || '0', 10);
+        const sortOrder = req.query.sort === 'desc' ? -1 : 1;
+
+        // Build query
+        const query = {
             $or: [
                 { sender: user1, receiver: user2 },
                 { sender: user2, receiver: user1 }
             ]
-        }).sort({ transactionDate: 1 });
+        };
 
-        res.json(transactions);
+        // Get total count for pagination info
+        const totalCount = await Transaction.countDocuments(query);
+
+        // Get transactions with pagination
+        const transactions = await Transaction.find(query)
+            .sort({ transactionDate: sortOrder })
+            .skip(skip)
+            .limit(limit);
+
+        // Calculate hasMore
+        const hasMore = skip + limit < totalCount;
+
+        res.json({
+            transactions,
+            pagination: {
+                total: totalCount,
+                limit,
+                skip,
+                hasMore
+            }
+        });
     } catch (error) {
         const err = error as Error;
         res.status(500).json({ error: err.message });
